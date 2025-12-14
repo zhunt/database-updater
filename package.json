@@ -1,0 +1,29 @@
+{
+    "name": "csv-to-mysql-importer",
+    "version": "1.0.0",
+    "description": "A script to import CSV data into a MySQL database",
+    "main": "dist/index.js",
+    "scripts": {
+        "start": "ts-node src/index.ts",
+        "build": "tsc",
+        "dev": "ts-node src/index.ts"
+    },
+    "keywords": [
+        "csv",
+        "mysql",
+        "typescript",
+        "nodejs"
+    ],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "csv-parser": "^3.0.0",
+        "dotenv": "^16.3.1",
+        "mysql2": "^3.6.5"
+    },
+    "devDependencies": {
+        "@types/node": "^20.10.4",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.3.3"
+    }
+}
