@@ -43,27 +43,17 @@ function processOpeningTimes(row: Record<string, string>): Record<string, string
         { key: 'Open_Time_Sunday', label: 'sunday' },
     ];
 
-    const processedTimes: Record<string, string> = {};
+    const processedTimes: Record<string, any> = {};
 
     days.forEach(({ key, label }) => {
         let openingTime = row[key] || '';
 
         if (openingTime.includes('Closed')) {
-            processedTimes[label] = `{"${label}": {"start": {"0": ""},"close": {"0": ""}}}`;
+            processedTimes[label] = { "start": { "0": "" }, "close": { "0": "" } };
         } else if (openingTime.includes('Open 24 hours')) {
-            processedTimes[label] = `{"${label}": {"enable": "enable","remain_close": "open","start": {"0": ""},"close": {"0": ""}}}`;
+            processedTimes[label] = { "enable": "enable", "remain_close": "open", "start": { "0": "12:00" }, "close": { "0": "01:00" } };
         } else {
-            // Extract opening and closing times
-            // const timeMatch = openingTime.match(/(\d{1,2}:\d{2}[AP]M)–(\d{1,2}:\d{2}[AP]M)/);
-            // if (timeMatch) {
-            //     const [_, startTime, closeTime] = timeMatch;
-            //     processedTimes[label] = `{"${label}": {"start": {"0": "${startTime}"},"close": {"0": "${closeTime}"}}}`;
-            // } else {
-            //     // Handle invalid or unexpected formats
-            //     processedTimes[label] = `{"${label}": {"start": {"0": ""},"close": {"0": ""}}}`;
-            // }
             const regex = /(\d{1,2}(?::\d{2})?[AP]M?|\d{1,2}(?::\d{2})?)–(\d{1,2}(?::\d{2})?[AP]M?)/;
-
             const match = openingTime.match(regex);
             if (match) {
                 let [_, startTime, endTime] = match;
@@ -81,7 +71,8 @@ function processOpeningTimes(row: Record<string, string>): Record<string, string
                 const endTime24 = to24HourFormat(endTime);
 
                 console.log(`Start Time: ${startTime24}, End Time: ${endTime24}`);
-                processedTimes[label] = `{"${label}": {"start": {"0": "${startTime24}"},"close": {"0": "${endTime24}"}}}`;
+                processedTimes[label] = { "enable": "enable", "start": { "0": startTime24 }, "close": { "0": endTime24 } }
+
             } else {
                 console.log(`No match found for: ${openingTime}`);
             }
@@ -89,7 +80,7 @@ function processOpeningTimes(row: Record<string, string>): Record<string, string
 
 
 
-            // ---
+
         }
     });
 
@@ -124,26 +115,7 @@ const MAIN = async () => {
 
             let openingTimes = processOpeningTimes(row);
 
-            // // look though each day and if it is not empty, add it to the openingTimes object
-            // for (const day of Object.keys(openingTimes)) {
-            //     if (openingTimes[day]) {
-            //         openingTimes[day] = {
-            //             enable: 'enable',
-            //             start: {
-            //                 '0': openingTimes[day]
-            //             },
-            //             close: {
-            //                 '0': openingTimes[day]
-            //             }
-            //         };
-            //     }
-            // }
-
-
-
-
-
-
+            //console.log(`  -> openingTimes: ${openingTimes}`);
 
             let metaValue = JSON.stringify(openingTimes);
             metaValue = convertJsonToPhpSerialized(metaValue);
@@ -164,9 +136,9 @@ const MAIN = async () => {
             const postId = postRows[0].ID;
             console.log(`  -> Found ID: ${postId}`);
 
-            // 2. Look up in test_npu_postmeta
+            // 2. Look up in npu_postmeta
             const [metaRows] = await pool.query<any[]>(
-                "SELECT meta_id FROM test_npu_postmeta WHERE post_id = ? AND meta_key = '_bdbh'",
+                "SELECT meta_id FROM npu_postmeta WHERE post_id = ? AND meta_key = '_bdbh'",
                 [postId]
             );
 
@@ -174,7 +146,7 @@ const MAIN = async () => {
                 // Update existing
                 console.log(`  -> Meta found. Updating...`);
                 await pool.query(
-                    "UPDATE test_npu_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_bdbh'",
+                    "UPDATE npu_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_bdbh'",
                     [metaValue, postId]
                 );
                 console.log('  -> Update OK.');
@@ -182,7 +154,7 @@ const MAIN = async () => {
                 // Insert new
                 console.log(`  -> Meta not found. Inserting...`);
                 await pool.query(
-                    "INSERT INTO test_npu_postmeta (post_id, meta_key, meta_value) VALUES (?, '_bdbh', ?)",
+                    "INSERT INTO npu_postmeta (post_id, meta_key, meta_value) VALUES (?, '_bdbh', ?)",
                     [postId, metaValue]
                 );
                 console.log('  -> Insert OK.');
