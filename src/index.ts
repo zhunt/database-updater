@@ -4,6 +4,21 @@ import { serialize } from 'php-serialize';
 import path from 'path';
 
 
+// Helper function to convert 12-hour time to 24-hour format
+function to24HourFormat(time: string): string {
+    const [_, hour, minute = "00", period] = time.match(/(\d{1,2})(?::(\d{2}))?([AP]M)?/) || [];
+    let hour24 = parseInt(hour, 10);
+
+    if (period === "PM" && hour24 !== 12) {
+        hour24 += 12;
+    } else if (period === "AM" && hour24 === 12) {
+        hour24 = 0;
+    }
+
+    return `${hour24.toString().padStart(2, "0")}:${minute}`;
+}
+
+
 function convertJsonToPhpSerialized(jsonString: string): string {
     try {
         // Parse the JSON string into a JavaScript object
@@ -15,6 +30,70 @@ function convertJsonToPhpSerialized(jsonString: string): string {
         console.error('Error converting JSON to PHP serialized format:', error);
         return '';
     }
+}
+
+function processOpeningTimes(row: Record<string, string>): Record<string, string> {
+    const days = [
+        { key: 'Open_Time_Monday', label: 'monday' },
+        { key: 'Open_Time_Tuesday', label: 'tuesday' },
+        { key: 'Open_Time_Wednesday', label: 'wednesday' },
+        { key: 'Open_Time_Thursday', label: 'thursday' },
+        { key: 'Open_Time_Friday', label: 'friday' },
+        { key: 'Open_Time_Saturday', label: 'saturday' },
+        { key: 'Open_Time_Sunday', label: 'sunday' },
+    ];
+
+    const processedTimes: Record<string, string> = {};
+
+    days.forEach(({ key, label }) => {
+        let openingTime = row[key] || '';
+
+        if (openingTime.includes('Closed')) {
+            processedTimes[label] = `{"${label}": {"start": {"0": ""},"close": {"0": ""}}}`;
+        } else if (openingTime.includes('Open 24 hours')) {
+            processedTimes[label] = `{"${label}": {"enable": "enable","remain_close": "open","start": {"0": ""},"close": {"0": ""}}}`;
+        } else {
+            // Extract opening and closing times
+            // const timeMatch = openingTime.match(/(\d{1,2}:\d{2}[AP]M)–(\d{1,2}:\d{2}[AP]M)/);
+            // if (timeMatch) {
+            //     const [_, startTime, closeTime] = timeMatch;
+            //     processedTimes[label] = `{"${label}": {"start": {"0": "${startTime}"},"close": {"0": "${closeTime}"}}}`;
+            // } else {
+            //     // Handle invalid or unexpected formats
+            //     processedTimes[label] = `{"${label}": {"start": {"0": ""},"close": {"0": ""}}}`;
+            // }
+            const regex = /(\d{1,2}(?::\d{2})?[AP]M?|\d{1,2}(?::\d{2})?)–(\d{1,2}(?::\d{2})?[AP]M?)/;
+
+            const match = openingTime.match(regex);
+            if (match) {
+                let [_, startTime, endTime] = match;
+
+                // Assume PM if no AM/PM is specified
+                if (!startTime.includes('AM') && !startTime.includes('PM')) {
+                    startTime += 'PM';
+                }
+                if (!endTime.includes('AM') && !endTime.includes('PM')) {
+                    endTime += 'PM';
+                }
+
+                // Convert to 24-hour format
+                const startTime24 = to24HourFormat(startTime);
+                const endTime24 = to24HourFormat(endTime);
+
+                console.log(`Start Time: ${startTime24}, End Time: ${endTime24}`);
+                processedTimes[label] = `{"${label}": {"start": {"0": "${startTime24}"},"close": {"0": "${endTime24}"}}}`;
+            } else {
+                console.log(`No match found for: ${openingTime}`);
+            }
+
+
+
+
+            // ---
+        }
+    });
+
+    return processedTimes;
 }
 
 const MAIN = async () => {
@@ -42,84 +121,28 @@ const MAIN = async () => {
             console.log(`Processing Title: "${title}"`);
 
             // Extract Opening Times
-            /*
-            const openingTimes = {
-                Monday: row['Open_Time_Monday'] || '',
-                Tuesday: row['Open_Time_Tuesday'] || '',
-                Wednesday: row['Open_Time_Wednesday'] || '',
-                Thursday: row['Open_Time_Thursday'] || '',
-                Friday: row['Open_Time_Friday'] || '',
-                Saturday: row['Open_Time_Saturday'] || '',
-                Sunday: row['Open_Time_Sunday'] || ''
-            };
-*/
 
-            const openingTimes = {
-                "monday": {
-                    "enable": "enable",
-                    "start": {
-                        "0": "00:00"
-                    },
-                    "close": {
-                        "0": "22:00"
-                    }
-                },
-                "tuesday": {
-                    "enable": "enable",
-                    "start": {
-                        "0": "00:00"
-                    },
-                    "close": {
-                        "0": "22:00"
-                    }
-                },
-                "wednesday": {
-                    "enable": "enable",
-                    "start": {
-                        "0": "00:00"
-                    },
-                    "close": {
-                        "0": "22:00"
-                    }
-                },
-                "thursday": {
-                    "enable": "enable",
-                    "start": {
-                        "0": "00:00"
-                    },
-                    "close": {
-                        "0": "22:00"
-                    }
-                },
-                "friday": {
-                    "enable": "enable",
-                    "start": {
-                        "0": "00:00"
-                    },
-                    "close": {
-                        "0": "22:00"
-                    }
-                },
-                "saturday": {
-                    "enable": "enable",
-                    "start": {
-                        "0": "00:00"
-                    },
-                    "close": {
-                        "0": "22:00"
-                    }
-                },
-                "sunday": {
-                    "enable": "enable",
-                    "start": {
-                        "0": "00:00"
-                    },
-                    "close": {
-                        "0": "22:00"
-                    }
-                }
+            let openingTimes = processOpeningTimes(row);
 
-            };
+            // // look though each day and if it is not empty, add it to the openingTimes object
+            // for (const day of Object.keys(openingTimes)) {
+            //     if (openingTimes[day]) {
+            //         openingTimes[day] = {
+            //             enable: 'enable',
+            //             start: {
+            //                 '0': openingTimes[day]
+            //             },
+            //             close: {
+            //                 '0': openingTimes[day]
+            //             }
+            //         };
+            //     }
+            // }
+
+
+
+
+
 
 
             let metaValue = JSON.stringify(openingTimes);
