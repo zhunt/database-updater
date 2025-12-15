@@ -120,7 +120,7 @@ const MAIN = async () => {
             let metaValue = JSON.stringify(openingTimes);
             metaValue = convertJsonToPhpSerialized(metaValue);
 
-            console.log(`  -> Meta Value: ${metaValue}`);
+            // console.log(`  -> Meta Value: ${metaValue}`);
 
             // 1. Look up the ID in npu_posts
             const [postRows] = await pool.query<any[]>(
@@ -158,6 +158,73 @@ const MAIN = async () => {
                     [postId, metaValue]
                 );
                 console.log('  -> Insert OK.');
+            }
+
+            // Check for meal options in "about" column
+            const aboutText = row['about'] || '';
+            const meals: string[] = [];
+            const diets: string[] = [];
+
+            if (aboutText.includes('Serves breakfast')) meals.push('Breakfast');
+            if (aboutText.includes('Serves lunch')) meals.push('Lunch');
+            if (aboutText.includes('Serves dinner')) meals.push('Dinner');
+
+            if (aboutText.includes('halal')) diets.push('Halal');
+            if (aboutText.includes('vegetarian')) diets.push('Vegetarian Friendly');
+
+            if (meals.length > 0) {
+                console.log(`  -> Found meals: ${meals.join(', ')}, updating _custom-checkbox-2`);
+
+                let mealMetaValue = JSON.stringify(meals);
+                mealMetaValue = convertJsonToPhpSerialized(mealMetaValue);
+
+                let dietsMetaValue = JSON.stringify(diets);
+                dietsMetaValue = convertJsonToPhpSerialized(dietsMetaValue);
+
+                console.log(`  -> Meal Meta Value: ${mealMetaValue}`);
+                console.log(`  -> Diets Meta Value: ${dietsMetaValue}`);
+
+
+                const [mealMetaRows] = await pool.query<any[]>(
+                    "SELECT meta_id FROM npu_postmeta WHERE post_id = ? AND meta_key = '_custom-checkbox-2'",
+                    [postId]
+                );
+
+                if (mealMetaRows.length > 0) {
+                    await pool.query(
+                        "UPDATE npu_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_custom-checkbox-2'",
+                        [mealMetaValue, postId]
+                    );
+                    console.log('  -> Updated _custom-checkbox-2');
+
+                } else {
+                    await pool.query(
+                        "INSERT INTO npu_postmeta (post_id, meta_key, meta_value) VALUES (?, '_custom-checkbox-2', ?)",
+                        [postId, mealMetaValue]
+                    );
+                    console.log('  -> Inserted _custom-checkbox-2');
+                }
+
+                // repeat for diets
+                const [dietsMetaRows] = await pool.query<any[]>(
+                    "SELECT meta_id FROM npu_postmeta WHERE post_id = ? AND meta_key = '_custom-checkbox'",
+                    [postId]
+                );
+
+                if (dietsMetaRows.length > 0) {
+                    await pool.query(
+                        "UPDATE npu_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_custom-checkbox'",
+                        [dietsMetaValue, postId]
+                    );
+                    console.log('  -> Updated _custom-checkbox');
+
+                } else {
+                    await pool.query(
+                        "INSERT INTO npu_postmeta (post_id, meta_key, meta_value) VALUES (?, '_custom-checkbox', ?)",
+                        [postId, dietsMetaValue]
+                    );
+                    console.log('  -> Inserted _custom-checkbox');
+                }
             }
         }
 
