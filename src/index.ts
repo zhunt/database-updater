@@ -5,10 +5,10 @@ import path from 'path';
 import { log } from 'console';
 
 
-function convertStringToJSON(input: string): any {
+function convertStringToJSON(input: string): any {  console.log("Input string:", input);
   try {
     // Step 1: Replace blocks that start and end with single quotes and don't contain any quotes inside
-    const step1 = input.replace(/'([^'"]*?)'/g, '"$1"');
+    const step1 = input.trim().replace(/'([^'"]*?)'/g, '"$1"').replace(/(\r?\n|\r)/g, ' ');
 
     // Step 2: Leave blocks with double quotes and single quotes inside as-is (no action needed)
 
@@ -105,14 +105,14 @@ function processOpeningTimes(row: Record<string, string>): Record<string, string
     return processedTimes;
 }
 
-function jsonToHtmlList(jsonString: string) {
+function jsonToHtmlList(data: object) {
     try {
-        const data = JSON.parse(jsonString);
-        let html = '<ul>';
+        //const data = jsonString;// JSON.parse(jsonString);
+        let html = '';//'<ul>';
 
         for (const [key, values] of Object.entries(data)) {
             if (Array.isArray(values)) {
-                html += `<li><strong>${key}:</strong> ${values.join(', ')}</li>`;
+                html += `<p><strong>${key.replace(/_/g, ' ')}: </strong> ${values.join(', ')}</p>`;
             } else {
                 console.warn(`Unexpected value type for key "${key}":`, values);
             }
@@ -124,6 +124,34 @@ function jsonToHtmlList(jsonString: string) {
         console.error('Invalid JSON string:', error);
         return '<p>Error: Invalid JSON</p>';
     }
+}
+
+function generateVenueHoursTable(venueHours: Record<string, any>): string {
+    function toAmPmFormat(time: string): string {
+        const [hour, minute] = time.split(":").map(Number);
+        const period = hour >= 12 ? "PM" : "AM";
+        const hour12 = hour % 12 || 12; // Convert 0 to 12 for 12-hour format
+        return `${hour12}:${minute.toString().padStart(2, "0")} ${period}`;
+    }
+
+    let tableHTML = '<table border="1" id="venue-hours-table">';
+    tableHTML += '<tr><th>Day</th><th>Hours</th></tr>';
+
+    for (const day in venueHours) {
+        const dayData = venueHours[day];
+        const openTime = dayData.start?.["0"] || "";
+        const closeTime = dayData.close?.["0"] || "";
+
+        let hours = "Closed";
+        if (openTime && closeTime) {
+            hours = `${toAmPmFormat(openTime)} - ${toAmPmFormat(closeTime)}`;
+        }
+
+        tableHTML += `<tr><td>${day.charAt(0).toUpperCase() + day.slice(1)}</td><td>${hours}</td></tr>`;
+    }
+
+    tableHTML += '</table>';
+    return tableHTML;
 }
 
 const MAIN = async () => {
@@ -152,7 +180,7 @@ const MAIN = async () => {
 
             // Extract Opening Times
 
-            let openingTimes = processOpeningTimes(row);
+            const openingTimes = processOpeningTimes(row);
 
             //console.log(`  -> openingTimes: ${openingTimes}`);
 
@@ -320,17 +348,42 @@ const MAIN = async () => {
             // to-do: fill in the features section, list the sub-category in bold and followed by a list of the features
             const features: string[] = [];
 
-            let contentField = aboutText + `<hr>`; //
-
             // populate post_content with features
             if (aboutText) {
+
+                let contentField = aboutText + `<hr>`; //
                 const aboutTextJson = convertStringToJSON(aboutText);
 
                 let featureListHtml = jsonToHtmlList(aboutTextJson);
+
+                contentField += `<h3>Features</h3>${featureListHtml}`;
+
+                contentField += `<h3>Hours</h3>`;
+
+                //contentField += `<script> venueHours = ${JSON.stringify(openingTimes)}; </script>`;
+
+                contentField += generateVenueHoursTable(openingTimes);
+
+                
+                
+
+                // update the post table // set postId
+                // SELECT * FROM npu_post WHERE ID = postId AND (content = '' OR content LIKE '{%');
+                const [postContentRows] = await pool.query<any[]>(
+                        "SELECT post_content FROM npu_posts WHERE ID = ? AND (post_content = '' OR post_content LIKE '{%')",
+                        [postId]
+                    );
+
+                if (postContentRows.length > 0) {
+                    console.log('  -> Found post_content');  
+                    await pool.query(
+                        "UPDATE npu_posts SET post_content = ? WHERE ID = ?",
+                        [contentField, postId]
+                    );
+                    console.log('  -> Updated post_content');    
+                }
             }
 
-            // update the post table
-            
 
         }
 
