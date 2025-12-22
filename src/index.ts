@@ -2,7 +2,25 @@ import { createPool } from './db';
 import { parseCsv } from './csvParser';
 import { serialize } from 'php-serialize';
 import path from 'path';
+import { log } from 'console';
 
+
+function convertStringToJSON(input: string): any {
+  try {
+    // Step 1: Replace blocks that start and end with single quotes and don't contain any quotes inside
+    const step1 = input.replace(/'([^'"]*?)'/g, '"$1"');
+
+    // Step 2: Leave blocks with double quotes and single quotes inside as-is (no action needed)
+
+    // Step 3: Parse the corrected string into a JSON object
+    const jsonObject = JSON.parse(step1);
+
+    return jsonObject;
+  } catch (error: any) {
+    console.error("Error converting string to JSON:", error.message);
+    return null;
+  }
+}
 
 // Helper function to convert 12-hour time to 24-hour format
 function to24HourFormat(time: string): string {
@@ -85,6 +103,27 @@ function processOpeningTimes(row: Record<string, string>): Record<string, string
     });
 
     return processedTimes;
+}
+
+function jsonToHtmlList(jsonString: string) {
+    try {
+        const data = JSON.parse(jsonString);
+        let html = '<ul>';
+
+        for (const [key, values] of Object.entries(data)) {
+            if (Array.isArray(values)) {
+                html += `<li><strong>${key}:</strong> ${values.join(', ')}</li>`;
+            } else {
+                console.warn(`Unexpected value type for key "${key}":`, values);
+            }
+        }
+
+        html += '</ul>';
+        return html;
+    } catch (error) {
+        console.error('Invalid JSON string:', error);
+        return '<p>Error: Invalid JSON</p>';
+    }
 }
 
 const MAIN = async () => {
@@ -184,7 +223,6 @@ const MAIN = async () => {
                 console.log(`  -> Meal Meta Value: ${mealMetaValue}`);
                 console.log(`  -> Diets Meta Value: ${dietsMetaValue}`);
 
-
                 const [mealMetaRows] = await pool.query<any[]>(
                     "SELECT meta_id FROM npu_postmeta WHERE post_id = ? AND meta_key = '_custom-checkbox-2'",
                     [postId]
@@ -226,6 +264,74 @@ const MAIN = async () => {
                     console.log('  -> Inserted _custom-checkbox');
                 }
             }
+
+            // add the latitude and longitude 
+
+            const latitude: string = row['Latitude'] || '';
+            const longitude: string = row['Longitude'] || '';
+
+            // update npu_postmeta._manual_lat and npu_postmeta._manual_lng
+            if (latitude) {
+                const [latMetaRows] = await pool.query<any[]>(
+                    "SELECT meta_id FROM npu_postmeta WHERE post_id = ? AND meta_key = '_manual_lat'",
+                    [postId]
+                );
+
+                if (latMetaRows.length > 0) {
+                    await pool.query(
+                        "UPDATE npu_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_manual_lat'",
+                        [latitude, postId]
+                    );
+                    console.log('  -> Updated _manual_lat');
+
+                } else {
+                    await pool.query(
+                        "INSERT INTO npu_postmeta (post_id, meta_key, meta_value) VALUES (?, '_manual_lat', ?)",
+                        [postId, latitude]
+                    );
+                    console.log('  -> Inserted _manual_lat');
+                }
+            }
+
+            if (longitude) {
+                // repeat for longitude
+                const [longMetaRows] = await pool.query<any[]>(
+                    "SELECT meta_id FROM npu_postmeta WHERE post_id = ? AND meta_key = '_manual_lng'",
+                    [postId]
+                );
+
+                if (longMetaRows.length > 0) {
+                    await pool.query(
+                        "UPDATE npu_postmeta SET meta_value = ? WHERE post_id = ? AND meta_key = '_manual_lng'",
+                        [longitude, postId]
+                    );
+                    console.log('  -> Updated _manual_lng');
+
+                } else {
+                    await pool.query(
+                        "INSERT INTO npu_postmeta (post_id, meta_key, meta_value) VALUES (?, '_manual_lng', ?)",
+                        [postId, longitude]
+                    );
+                    console.log('  -> Inserted _manual_lng');
+                }
+            
+            }            
+
+            // to-do: fill in the features section, list the sub-category in bold and followed by a list of the features
+            const features: string[] = [];
+
+            let contentField = aboutText + `<hr>`; //
+
+            // populate post_content with features
+            if (aboutText) {
+                const aboutTextJson = convertStringToJSON(aboutText);
+
+                let featureListHtml = jsonToHtmlList(aboutTextJson);
+            }
+
+            // update the post table
+            
+
         }
 
     } catch (error) {
