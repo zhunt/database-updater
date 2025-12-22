@@ -154,7 +154,7 @@ function generateVenueHoursTable(venueHours: Record<string, any>): string {
     return tableHTML;
 }
 
-const MAIN = async () => {
+const MAIN = async (restaurantName: string = '') => {
     const pool = createPool();
     const csvFilePath = path.join(__dirname, '../test-sheet-1.csv');
 
@@ -173,6 +173,11 @@ const MAIN = async () => {
             const title = row['Title'];
             if (!title) {
                 console.warn('Skipping row without "Title":', row);
+                continue;
+            }
+
+            if (restaurantName && title !== restaurantName) {
+                console.log(`Skipping "${title}" as it does not match the specified restaurant name "${restaurantName}".`);
                 continue;
             }
 
@@ -394,4 +399,4 @@ const MAIN = async () => {
     }
 };
 
-MAIN();
+MAIN(process.argv[2]); // Pass restaurant name as command-line argument
